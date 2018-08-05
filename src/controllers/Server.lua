@@ -14,7 +14,7 @@ do código, e estou ciente que estes trechos não serão considerados para fins 
 
 local socket = require "socket" --import socket api
 local NewsManager = require "server.models.business.NewsManager" --import NewsManager object class
-local ServersHistory = require "server.models.business.ServersHistory" --import ServersHistory object class
+local ConsensusManager = require "server.models.business.ConsensusManager"
 local Server = {} --create table to have new function
 
 Server.__index = Server -- set index metadata to Server table
@@ -28,7 +28,7 @@ function Server:new(newsFilename) --metafunction to instantiate the object
         threads = {}, --thread that will run tcp connections
         newsManager = NewsManager:new(newsFilename), --NewsManager object
         serverAddresses = {},
-        serversHistory = ServersHistory:new()
+        consensusManager = ConsensusManager:new()
     }
 
     local file = io.open("../config.conf", "r")
@@ -75,6 +75,7 @@ function Server:sendInformations(message)
                 connection:send(message .. "\n")
                 attempt = 8
             --[[else
+                print(message:match("[^add:<>]+[%S, %d]+"))
                 print("Attempt " .. attempt .. ":Error to connect to " .. value.host .. ":" .. value.port)
             end
             coroutine.yield()--]]
@@ -84,13 +85,23 @@ function Server:sendInformations(message)
     end
 end
 
+function Server:protocol(connection)
+    local peername = connection:getpeername()
+    local message = connection:receive()
+    if message:find("add:<>") then
+        self.newsManager:addNews(message:match("[^add:<>]+[%S, %d]+"))
+    elseif message:find("consensus:<>") then
+        self.consensusManager:stage(message)
+    end
+end
+
 function Server:execute()
     local connection_loop = function() --function that execute listen thread
         local connection = nil --variable that stores accepted connection
         while true do --main loop for current thread
             connection = self.server:accept() --try to connect to a connection
             if connection then --if successfuly connect to a connection
-                local peername = connection:getpeername()
+                table.insert(self.threads, coroutine.create(function() self:protocol(connection) end))
             end
             coroutine.yield() --pause current coroutine
         end
