@@ -13,8 +13,8 @@ do código, e estou ciente que estes trechos não serão considerados para fins 
 --]]
 
 local socket = require "socket" --import socket api
-local NewsManager = require "server.models.business.NewsManager" --import NewsManager object class
-local ConsensusManager = require "server.models.business.ConsensusManager"
+local NewsManager = require "models.business.NewsManager" --import NewsManager object class
+local ConsensusManager = require "models.business.ConsensusManager"
 local Server = {} --create table to have new function
 
 Server.__index = Server -- set index metadata to Server table
@@ -30,6 +30,8 @@ function Server:new(newsFilename) --metafunction to instantiate the object
         serverAddresses = {},
         consensusManager = ConsensusManager:new()
     }
+    this.consensusManager:setNewsManager(this.newsManager)
+    this.consensusManager:setParentServer(this)
 
     local file = io.open("../config.conf", "r")
     local conf = file:read("*all")
@@ -40,7 +42,7 @@ function Server:new(newsFilename) --metafunction to instantiate the object
     this.server:bind(this.host, this.port)
     this.server:listen(1000)
     this.server:settimeout(0.001)
-    this.newsManager:readFile()
+    this.newsManager:setConsensusManager(this.consensusManager)
 
     return setmetatable(this, Server)
 end
@@ -51,6 +53,7 @@ function Server:loadAddresses(filename)
         local port = tonumber(line:match("%d+$"))
         table.insert(self.serverAddresses, {host = host, port = port})
     end
+    self.consensusManager:setServerLimit(#self.serverAddresses + 1)
     return self
 end
 
@@ -60,6 +63,12 @@ function Server:verifyNews()
             for newsAdded in self.newsManager:iterateAddedNews() do
                 local message = "add:<>" .. newsAdded
                 self:sendInformations(message)
+            end
+        end
+        coroutine.yield()
+        if #self.newsManager.canStart > 0 then
+            for newsToConsensus in self.newsManager:iterateCanStartConsensus() do
+                self:sendInformations("consensus<start>:" .. newsToConsensus)
             end
         end
     end
@@ -90,12 +99,13 @@ function Server:protocol(connection)
     local message = connection:receive()
     if message:find("add:<>") then
         self.newsManager:addNews(message:match("[^add:<>]+[%S, %d]+"))
-    elseif message:find("consensus:<>") then
+    elseif message:find("consensus") then
         self.consensusManager:stage(message)
     end
 end
 
 function Server:execute()
+    table.insert(self.threads, coroutine.create(function() self.consensusManager:stage("consensus<start>: Eita Cara") end))--Only for test]]
     local connection_loop = function() --function that execute listen thread
         local connection = nil --variable that stores accepted connection
         while true do --main loop for current thread
@@ -109,9 +119,13 @@ function Server:execute()
     table.insert(self.threads, coroutine.create(connection_loop))
     table.insert(self.threads, coroutine.create(function() while true do self:verifyNews(); coroutine.yield() end end))
 
-    for count = 1, 50 do
-        for index = 1, #self.threads do
-            coroutine.resume(self.threads[index])
+    while true do
+        local index = 1
+        while index <= #self.threads do
+            if not coroutine.resume(self.threads[index]) then
+                table.remove(self.threads, index)
+            end
+            index = index + 1
         end
     end
 end

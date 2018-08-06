@@ -21,7 +21,9 @@ function NewsManager:new(filename)
 		filename = filename or "",
 		lastModification = 0,
 		newsInformation = {},
-		addedNews = {}
+		addedNews = {},
+		canStart = {}, -- list to news that can start the consensus
+		consensusManager = nil
 	}
 	return setmetatable(this, NewsManager)
 end
@@ -29,6 +31,10 @@ end
 function NewsManager:setFilename(filename)
 	self.filename = filename or self.filename
 	self.lastModification = 0
+end
+
+function NewsManager:setConsensusManager(consensusManager)
+	self.consensusManager = consensusManager
 end
 
 function NewsManager:readFile()
@@ -47,6 +53,9 @@ function NewsManager:readFile()
 			table.insert(self.addedNews, info[1])
 		end
 		self.newsInformation[info[1]] = {tonumber(info[2]), tonumber(info[3]:match("%d%.?%d+$"))}
+		if not self.consensusManager:isFinished(info[1]) and self.newsInformation[info[1]][1] >= 30 then
+			table.insert(self.canStart, info[1])
+		end
 	end
 end
 
@@ -65,18 +74,26 @@ function NewsManager:addNews(newsName)
 end
 
 function NewsManager:decisionAbout(newsName)
-	return self.newsInformation[newsName] and self.newsInformation[newsName][2] >= 3 and self.newsInformation[newsName][1] >= 30
+	return self.newsInformation[newsName] and (self.newsInformation[newsName][2] >= 3 and self.newsInformation[newsName][1] >= 30) or false
 end
 
-function NewsManager:iterateAddedNews()
+function NewsManager:__iterator(attribute)
 	return function()
-		if #self.addedNews > 0 then
-			local value = self.addedNews[#self.addedNews]
-			table.remove(self.addedNews, #self.addedNews)
+		if #self[attribute] > 0 then
+			local value = self[attribute][#self[attribute]]
+			table.remove(self[attribute], #self[attribute])
 			return value
 		end
 		return nil
 	end
+end
+
+function NewsManager:iterateCanStartConsensus()
+	return self:__iterator("canStart")
+end
+
+function NewsManager:iterateAddedNews()
+	return self:__iterator("addedNews")
 end
 
 return NewsManager
