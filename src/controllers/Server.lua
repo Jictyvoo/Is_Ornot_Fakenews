@@ -69,6 +69,7 @@ function Server:verifyNews() --function for thread that execute verifications in
         if #self.newsManager.canStart > 0 then --verify if can start the consesus protocol
             for newsToConsensus in self.newsManager:iterateCanStartConsensus() do --iterate news to start consensus
                 self:sendInformations("consensus<start>:" .. newsToConsensus)
+                self:sendInformations("consensus<decision>:" .. newsToConsensus .. ")(" .. self.host .. "@" .. tostring(self.newsManager:decisionAbout(newsToConsensus)))
             end
         end
     end
@@ -81,7 +82,6 @@ function Server:sendInformations(message) --method to send messages to all other
         connection:settimeout(0.1) --set timeout connection for don't stop client UI
         for attempt = 1, 7 do
             if connection:connect(value.host, value.port) then --connection established
-                print(attempt .. ": " .. message .. " - " .. value.host .. ":" .. value.port)
                 connection:send(message .. "\n")
                 attempt = 8 --force exit from attempts to connection
             end
@@ -91,7 +91,6 @@ function Server:sendInformations(message) --method to send messages to all other
 end
 
 function Server:protocol(connection) --method to start connection protocol
-    local peername = connection:getpeername()
     local message = connection:receive() --receive message from connection
     if message:find("add:<>") then --verify if is to add a new news
         self.newsManager:addNews(message:match("[^add:<>]+[%S, %d]+")) --added news

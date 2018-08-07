@@ -52,7 +52,7 @@ function NewsManager:readFile() --method to read news file
 		if not self.newsInformation[info[1]] then
 			table.insert(self.addedNews, info[1]) --add added news into addedNews table
 		end
-		self.newsInformation[info[1]] = {tonumber(info[2]), tonumber(info[3]:match("%d%.?%d+$"))} --add info to current table
+		self.newsInformation[info[1]] = {tonumber(info[2]), tonumber(info[3])} --add info to current table
 		if not self.consensusManager:isFinished(info[1]) and self.newsInformation[info[1]][1] >= 30 then
 			table.insert(self.canStart, info[1]) --if decided that can start consensus, then starts it
 		end

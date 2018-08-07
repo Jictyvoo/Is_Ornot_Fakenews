@@ -16,37 +16,38 @@ local ServersHistory = {}
 
 ServersHistory.__index = ServersHistory
 
-function ServersHistory:new()
+function ServersHistory:new() --class to save history of all servers decisions
 	local this = {
-		binser = require "binser",
-		history = {}
+		binser = require "binser", --loads library to serialize table 
+		history = {} --table to load history
 	}
 
-	local file = io.open("server_history.bin", "r")
+	local file = io.open("server_history.bin", "r") --open file to load previous content
 	if file then
-		this.history = this.binser.deserialize(file:read("*all"))
+		this.history = this.binser.deserialize(file:read("*all")) --deserialize file if it exists
 		file:close()
 	end
 
 	return setmetatable(this, ServersHistory)
 end
 
-function ServersHistory:updateInformations(serverAddress, information)
+function ServersHistory:updateInformations(serverAddress, information) --method to update informations about server
 	if not self.history[serverAddress] then self.history[serverAddress] = {} end
 	self.history[serverAddress][information.id] = information.decision
 	local serialized = self.binser.serialize(self.history)
-	local file = io.open("server_history.bin", "w")
-	file:write(serialized)
+	local file = io.open("server_history.bin", "w") --save information in saved table
+	file:write(serialized) --write serialized table
 	file:close()
 end
 
-function ServersHistory:itsTrustable(serverAddress)
-	local totalCorrect = 0
+function ServersHistory:itsTrustable(serverAddress) --method to verify if a server is trustable
+	return true
+	--[[local totalCorrect = 0
 	local total = 0
-	for key, value in pairs(self.history[serverAddress]) do
+	for key, value in pairs(self.history[serverAddress]) do --run out all of servers histories
 		local amountTrue = 0
 		local amountFalse = 0
-		for server, history in pairs(self.history) do
+		for server, history in pairs(self.history) do --run all decisions in the server history
 			if server ~= serverAddress then
 				if history[key].decision then
 					amountTrue = amountTrue + 1
@@ -63,7 +64,7 @@ function ServersHistory:itsTrustable(serverAddress)
 	if totalCorrect >= ((total * 2)/3) + 1 then
 		return true
 	end
-	return false
+	return false--]]
 end
 
 return ServersHistory
