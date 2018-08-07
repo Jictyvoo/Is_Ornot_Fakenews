@@ -33,79 +33,75 @@ function Server:new(newsFilename) --metafunction to instantiate the object
     this.consensusManager:setNewsManager(this.newsManager)
     this.consensusManager:setParentServer(this)
 
-    local file = io.open("../config.conf", "r")
+    local file = io.open("../config.conf", "r") --open config file with host and port for current server
     local conf = file:read("*all")
     this.host = conf:match("[^:]+")
-    this.port = tonumber(conf:match("%d+$"))
+    this.port = conf:match(":%d+"):gsub(":", "")
 
-    -- bind socket to the local host, at any port
+    -- bind socket to the local host, at specified port
     this.server:bind(this.host, this.port)
-    this.server:listen(1000)
+    this.server:listen(1000) --say that can listen 1000 clients connections
     this.server:settimeout(0.001)
-    this.newsManager:setConsensusManager(this.consensusManager)
+    this.newsManager:setConsensusManager(this.consensusManager) --add object to newsManager
 
     return setmetatable(this, Server)
 end
 
-function Server:loadAddresses(filename)
-    for line in io.lines(filename) do
+function Server:loadAddresses(filename) --function that loads server addresses
+    for line in io.lines(filename) do --open file and read every line in it
         local host = line:match("[^;]+")
         local port = tonumber(line:match("%d+$"))
-        table.insert(self.serverAddresses, {host = host, port = port})
+        table.insert(self.serverAddresses, {host = host, port = port}) --add address readed into address list
     end
-    self.consensusManager:setServerLimit(#self.serverAddresses + 1)
+    self.consensusManager:setServerLimit(#self.serverAddresses + 1) --add the number of existent servers
     return self
 end
 
-function Server:verifyNews()
-    if self.newsManager:asFileModified() then
-        if #self.newsManager.addedNews > 0 then
-            for newsAdded in self.newsManager:iterateAddedNews() do
+function Server:verifyNews() --function for thread that execute verifications in file and start protocol
+    if self.newsManager:asFileModified() then --verify if file was modified
+        if #self.newsManager.addedNews > 0 then --if have added new news to file, send it to others servers
+            for newsAdded in self.newsManager:iterateAddedNews() do --iterate all added news from file
                 local message = "add:<>" .. newsAdded
-                self:sendInformations(message)
+                self:sendInformations(message) --send message to all servers
             end
         end
-        coroutine.yield()
-        if #self.newsManager.canStart > 0 then
-            for newsToConsensus in self.newsManager:iterateCanStartConsensus() do
+        coroutine.yield() --interrupt thread
+        if #self.newsManager.canStart > 0 then --verify if can start the consesus protocol
+            for newsToConsensus in self.newsManager:iterateCanStartConsensus() do --iterate news to start consensus
                 self:sendInformations("consensus<start>:" .. newsToConsensus)
             end
         end
     end
 end
 
-function Server:sendInformations(message)
+function Server:sendInformations(message) --method to send messages to all others servers
     for key, value in pairs(self.serverAddresses) do
         local connection = socket.tcp() --create a tcp object for connection
         connection:bind(value.host, value.port) --establish the port and host to connect
         connection:settimeout(0.1) --set timeout connection for don't stop client UI
         for attempt = 1, 7 do
             if connection:connect(value.host, value.port) then --connection established
+                print(attempt .. ": " .. message .. " - " .. value.host .. ":" .. value.port)
                 connection:send(message .. "\n")
-                attempt = 8
-            --[[else
-                print(message:match("[^add:<>]+[%S, %d]+"))
-                print("Attempt " .. attempt .. ":Error to connect to " .. value.host .. ":" .. value.port)
-            end
-            coroutine.yield()--]]
+                attempt = 8 --force exit from attempts to connection
             end
         end
-        coroutine.yield()
+        coroutine.yield() --pause current thread
     end
 end
 
-function Server:protocol(connection)
+function Server:protocol(connection) --method to start connection protocol
     local peername = connection:getpeername()
-    local message = connection:receive()
-    if message:find("add:<>") then
-        self.newsManager:addNews(message:match("[^add:<>]+[%S, %d]+"))
-    elseif message:find("consensus") then
-        self.consensusManager:stage(message)
+    local message = connection:receive() --receive message from connection
+    if message:find("add:<>") then --verify if is to add a new news
+        self.newsManager:addNews(message:match("[^add:<>]+[%S, %d]+")) --added news
+    elseif message:find("consensus") then --verify if is a consensus attempt
+        self.consensusManager:stage(message) --start consensus protocol
     end
 end
 
-function Server:execute()
-    table.insert(self.threads, coroutine.create(function() self.consensusManager:stage("consensus<start>: Eita Cara") end))--Only for test]]
+function Server:execute() --method to execute main thread and coroutines management
+    --[[table.insert(self.threads, coroutine.create(function() self.consensusManager:stage("consensus<start>: É possível encolher") end))--Only for test]]
     local connection_loop = function() --function that execute listen thread
         local connection = nil --variable that stores accepted connection
         while true do --main loop for current thread
@@ -116,14 +112,14 @@ function Server:execute()
             coroutine.yield() --pause current coroutine
         end
     end
-    table.insert(self.threads, coroutine.create(connection_loop))
+    table.insert(self.threads, coroutine.create(connection_loop)) --add connection thread to threads table
     table.insert(self.threads, coroutine.create(function() while true do self:verifyNews(); coroutine.yield() end end))
 
-    while true do
-        local index = 1
+    while true do --main loop
+        local index = 1 --index to run out all threads
         while index <= #self.threads do
             if not coroutine.resume(self.threads[index]) then
-                table.remove(self.threads, index)
+                table.remove(self.threads, index) --remove thread from table if it is a dead thread
             end
             index = index + 1
         end

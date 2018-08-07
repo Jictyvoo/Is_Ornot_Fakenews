@@ -18,8 +18,8 @@ local ConsensusManager = {}
 
 ConsensusManager.__index = ConsensusManager
 
-function ConsensusManager:new()
-	local this = {
+function ConsensusManager:new() --class that have all consensus decisions
+	local this = { --iternal object for class
 		newsDecisions = {},
         serversHistory = ServersHistory:new(),
         newsManager = nil,
@@ -42,14 +42,11 @@ function ConsensusManager:setParentServer(parentServer)
 	self.parentServer = parentServer
 end
 
-function ConsensusManager:isFinished(newsName)
-	if self.newsDecisions[newsName] and self.newsDecisions[newsName].status then
-		return true
-	end
-	return false
+function ConsensusManager:isFinished(newsName) --verify if consensus for the news has finished
+	return self.newsDecisions[newsName] and self.newsDecisions[newsName].status
 end
 
-function ConsensusManager:tryEstablishConsensus(newsName)
+function ConsensusManager:tryEstablishConsensus(newsName) --protocol to try to establish the consensus
 	local currentQuantity = #self.newsDecisions[newsName].serversDecisions
 	if currentQuantity >= ((self.serversLimit * 2) / 3) + 1 then
 		local totalTrue = 0
